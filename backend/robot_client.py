@@ -7,6 +7,7 @@ Facade: Hides HTTP complexity behind clean methods like move(x, y).
 
 import logging
 from typing import Optional
+import os
 
 import httpx
 from tenacity import (
@@ -18,7 +19,8 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
-ROBOT_API_URL = "http://robot-sim:5000"
+
+ROBOT_API_URL = os.getenv("ROBOT_API_URL", "http://localhost:5000")
 
 
 class RobotStatus:
@@ -90,8 +92,7 @@ class RobotClient:
     async def move(self, x: int, y: int) -> dict:
         """POST /api/move - moves robot to (x, y). Coordinates must be 0-20."""
         if not (0 <= x <= 20 and 0 <= y <= 20):
-            raise ValueError(
-                f"Coordinates out of range: ({x}, {y}). Must be 0-20.")
+            raise ValueError(f"Coordinates out of range: ({x}, {y}). Must be 0-20.")
         try:
             response = await self._client.post("/api/move", json={"x": x, "y": y})
             response.raise_for_status()
@@ -152,3 +153,11 @@ class RobotClient:
         """Close the HTTP client cleanly on app shutdown."""
         await self._client.aclose()
         logger.info("RobotClient closed")
+
+
+# Module-level instance and error class for compatibility with main.py
+class RobotConnectionError(Exception):
+    pass
+
+
+robot = RobotClient.get_instance()
