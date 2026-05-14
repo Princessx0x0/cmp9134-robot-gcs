@@ -8,4 +8,8 @@ fastapi
 uvicorn[standard]
 
 # httpx is a fully featured HTTP client for Python 3, which provides a simple and intuitive API for making HTTP requests. it supports both synchronous and asynchronous programming styles, making it a great choice for testing your API endpoints or making HTTP requests to other services.
-httpx
+httpxhttpx
+tenacity
+pytest
+pytest-cov
+pytest-asyncio
