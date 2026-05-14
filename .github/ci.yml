@@ -1,0 +1,80 @@
+name: CI — Build, Test & Push
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  # ── Unit & Integration Tests ──────────────────────────────────────────────
+  test:
+    name: Run Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx tenacity
+
+      - name: Run unit and integration tests with coverage
+        run: |
+          cd backend
+          pytest tests/ -v --cov=. --cov-report=term-missing
+
+  # ── Docker Compose Build & Integration Test ───────────────────────────────
+  compose-test:
+    name: Docker Compose Integration Test
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build all containers
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d
+
+      - name: Wait for backend to be healthy
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8080/health; then
+              echo "Backend healthy"
+              exit 0
+            fi
+            echo "Waiting... ($i/15)"
+            sleep 3
+          done
+          echo "Backend never became healthy"
+          docker compose logs backend
+          exit 1
+
+      - name: Run dockerized test suite
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+            run --rm test-runner
+
+      - name: Print logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down

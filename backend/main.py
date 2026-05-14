@@ -188,11 +188,13 @@ async def get_status():
 #
 @app.post("/api/move")
 async def move_robot(x: int, y: int):
-    """Send a move command to the robot."""
     try:
         return await robot.move(x, y)
     except RobotConnectionError as exc:
         logger.warning("Move command failed: %s", exc)
+        return {"error": str(exc)}
+    except ValueError as exc:
+        logger.warning("Invalid move coordinates: %s", exc)
         return {"error": str(exc)}
 
 
