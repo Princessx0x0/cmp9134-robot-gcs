@@ -54,6 +54,7 @@ from robot_client import robot, RobotConnectionError
 #     without touching this file.
 ROBOT_API_URL = os.getenv("ROBOT_API_URL", "http://localhost:5000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
+ENABLE_ADVANCED_STATS = os.getenv("FF_ADVANCED_STATS", "false").lower() == "true"
 
 # ── Logging setup ──────────────────────────────────────────────────────────
 # basicConfig() configures the root logger once at startup.
@@ -225,3 +226,8 @@ async def reset_robot():
 #             await asyncio.sleep(0.5)   # push an update every 500 ms
 #     except WebSocketDisconnect:
 #         logger.info("Telemetry client disconnected")
+@app.get("/api/experimental_stats")
+def get_experimental_stats():
+    if not ENABLE_ADVANCED_STATS:
+        return {"error": "Feature not yet available."}
+    return {"status": "success", "data": "Advanced stats coming soon."}
