@@ -87,7 +87,7 @@ jobs:
         if: always()
         run: docker compose down
 
-deliver:
+  deliver:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: [ test, compose-test ]
