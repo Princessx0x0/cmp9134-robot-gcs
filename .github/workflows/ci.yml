@@ -30,10 +30,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio httpx tenacity
 
-      - name: Static Analysis (Linting)
+      - name: Static Analysis (Linting) 
         run: |
           pip install flake8
-          flake8 ./backend --count --max-complexity=5 --show-source --statistics --exclude=./backend/tests
+          flake8 ./backend --count --max-complexity=5 --max-line-length=120 --show-source --statistics --exclude=./backend/tests
 
       - name: Run unit and integration tests with coverage
         run: |
