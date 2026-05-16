@@ -1,0 +1,47 @@
+﻿# CMP9134 Robot GCS
+Ground Control Station for the CMP9134 virtual robot simulation.
+
+## Stack
+- Backend: FastAPI (Python)
+- Frontend: React + TypeScript
+- DB: SQLite + SQLAlchemy
+- Containerisation: Docker + docker-compose
+- CI/CD: GitHub Actions
+## System Architecture
+
+```mermaid
+flowchart TB
+    subgraph GCS["Ground Control Station (Docker Network)"]
+        subgraph Frontend["Frontend Container"]
+            UI[React Dashboard\nTypeScript + Tailwind]
+        end
+
+        subgraph Backend["Backend Container"]
+            API[FastAPI\nREST + WebSocket]
+            Auth[Auth Service\nJWT + bcrypt]
+            Telemetry[Telemetry Service\nObserver Pattern]
+            RobotClient[Robot Client\nSingleton + Retry Logic]
+        end
+
+        subgraph Database["Persistent Volume"]
+            DB[(SQLite\nUsers + Audit Logs)]
+        end
+    end
+
+    subgraph Robot["Robot Simulator (Docker Container)"]
+        Sim[Virtual Robot API\nFastAPI on :5000]
+    end
+
+    UI -->|HTTP REST + WebSocket| API
+    API --> Auth
+    API --> Telemetry
+    Telemetry --> RobotClient
+    API --> RobotClient
+    API --> DB
+    RobotClient -->|POST /api/move\nGET /api/status| Sim
+    Telemetry -->|ws://robot-sim:5000/ws/telemetry| Sim
+```
+
+## Documentation
+
+For detailed UML diagrams see [docs/uml_diagrams.md](docs/uml_diagrams.md)

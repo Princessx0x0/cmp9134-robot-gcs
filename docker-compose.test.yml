@@ -1,0 +1,12 @@
+services:
+  test-runner:
+    build:
+      context: ./backend
+      target: development
+    command: pytest tests/ -v --cov=. --cov-report=term-missing
+    environment:
+      - ROBOT_API_URL=http://robot-api:5000
+    depends_on:
+      - robot-api
+    volumes:
+      - ./backend:/workspace/backend
