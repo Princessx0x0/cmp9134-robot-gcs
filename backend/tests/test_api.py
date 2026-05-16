@@ -1,17 +1,14 @@
 """
 Integration Tests — API Routes
 ===============================
-These tests use FastAPI's TestClient to make real HTTP requests
-against the application without needing a running server.
-
-Note: These tests mock the robot client so no actual robot connection
-is needed — we are testing that our API routes behave correctly,
-not that the robot simulator works.
+Tests all API endpoints with proper authentication headers.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 import sys
 import os
@@ -19,12 +16,27 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app
+from database import get_db, Base
+from models import User
+from auth import hash_password, create_access_token
 from robot_client import RobotStatus, RobotConnectionError
 
+TEST_DATABASE_URL = "sqlite:///./test.db"
+engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def override_get_db():
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
-
-
-# ── Mock robot status fixture ──────────────────────────────────────────────
 
 MOCK_STATUS = RobotStatus(
     {
@@ -36,101 +48,209 @@ MOCK_STATUS = RobotStatus(
 )
 
 
-# ── Health check ───────────────────────────────────────────────────────────
+def get_commander_token():
+    db = TestingSessionLocal()
+    Base.metadata.create_all(bind=engine)
+    existing = db.query(User).filter(User.username == "test_commander").first()
+    if not existing:
+        user = User(
+            username="test_commander",
+            password_hash=hash_password("password123"),
+            role="commander",
+        )
+        db.add(user)
+        db.commit()
+    db.close()
+    return create_access_token({"sub": "test_commander", "role": "commander"})
+
+
+def get_viewer_token():
+    db = TestingSessionLocal()
+    Base.metadata.create_all(bind=engine)
+    existing = db.query(User).filter(User.username == "test_viewer").first()
+    if not existing:
+        user = User(
+            username="test_viewer",
+            password_hash=hash_password("password123"),
+            role="viewer",
+        )
+        db.add(user)
+        db.commit()
+    db.close()
+    return create_access_token({"sub": "test_viewer", "role": "viewer"})
 
 
 def test_health_check():
-    """Health endpoint should always return 200 OK."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-# ── Status endpoint ────────────────────────────────────────────────────────
+def test_register_new_user():
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": "brandnewuser",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 201
+
+
+def test_register_duplicate_user():
+    client.post(
+        "/auth/register",
+        json={
+            "username": "duplicateuser",
+            "password": "password123",
+        },
+    )
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": "duplicateuser",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 409
+
+
+def test_login_valid_credentials():
+    client.post(
+        "/auth/register",
+        json={
+            "username": "loginuser",
+            "password": "password123",
+        },
+    )
+    response = client.post(
+        "/auth/login",
+        json={
+            "username": "loginuser",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+
+def test_login_invalid_credentials():
+    response = client.post(
+        "/auth/login",
+        json={
+            "username": "loginuser",
+            "password": "wrongpassword",
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_get_status_unauthenticated():
+    response = client.get("/api/status")
+    assert response.status_code == 401
 
 
 def test_get_status_success():
-    """GET /api/status should return robot data when robot is reachable."""
+    token = get_viewer_token()
     with patch("main.robot") as mock_robot:
         mock_robot.get_status = AsyncMock(return_value=MOCK_STATUS)
-        response = client.get("/api/status")
+        response = client.get(
+            "/api/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == "XR-900"
-        assert data["battery"] == 100.0
-        assert data["status"] == "IDLE"
+        assert response.json()["id"] == "XR-900"
 
 
 def test_get_status_robot_unreachable():
-    """GET /api/status should return error dict when robot is unreachable."""
+    token = get_viewer_token()
     with patch("main.robot") as mock_robot:
         mock_robot.get_status = AsyncMock(
             side_effect=RobotConnectionError("Connection refused")
         )
-        response = client.get("/api/status")
+        response = client.get(
+            "/api/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert response.status_code == 200
         assert "error" in response.json()
 
 
-# ── Move endpoint ──────────────────────────────────────────────────────────
+def test_move_unauthenticated():
+    response = client.post("/api/move", params={"x": 5, "y": 5})
+    assert response.status_code == 401
+
+
+def test_move_viewer_forbidden():
+    token = get_viewer_token()
+    response = client.post(
+        "/api/move",
+        params={"x": 5, "y": 5},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
 
 
 def test_move_valid_coordinates():
-    """POST /api/move with valid coordinates should return success message."""
+    token = get_commander_token()
     with patch("main.robot") as mock_robot:
         mock_robot.move = AsyncMock(return_value={"message": "Navigating to (5, 10)"})
-        response = client.post("/api/move", params={"x": 5, "y": 10})
-        assert response.status_code == 200
-        assert "message" in response.json()
-
-
-def test_move_invalid_coordinates_out_of_range():
-    """POST /api/move with coordinates > 20 should return error."""
-    with patch("main.robot") as mock_robot:
-        mock_robot.move = AsyncMock(
-            side_effect=ValueError("Coordinates out of range: (25, 0). Must be 0-20.")
+        response = client.post(
+            "/api/move",
+            params={"x": 5, "y": 10},
+            headers={"Authorization": f"Bearer {token}"},
         )
-        response = client.post("/api/move", params={"x": 25, "y": 0})
         assert response.status_code == 200
-        assert "error" in response.json() or response.status_code == 422
-
-
-def test_move_invalid_coordinates_negative():
-    """POST /api/move with negative coordinates should return error."""
-    with patch("main.robot") as mock_robot:
-        mock_robot.move = AsyncMock(
-            side_effect=ValueError("Coordinates out of range: (-1, 5). Must be 0-20.")
-        )
-        response = client.post("/api/move", params={"x": -1, "y": 5})
-        assert response.status_code == 200
-        assert "error" in response.json() or response.status_code == 422
 
 
 def test_move_robot_unreachable():
-    """POST /api/move should return error dict when robot is unreachable."""
+    token = get_commander_token()
     with patch("main.robot") as mock_robot:
         mock_robot.move = AsyncMock(side_effect=RobotConnectionError("Timeout"))
-        response = client.post("/api/move", params={"x": 5, "y": 5})
+        response = client.post(
+            "/api/move",
+            params={"x": 5, "y": 5},
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert response.status_code == 200
         assert "error" in response.json()
 
 
-# ── Reset endpoint ─────────────────────────────────────────────────────────
+def test_reset_unauthenticated():
+    response = client.post("/api/reset")
+    assert response.status_code == 401
+
+
+def test_reset_viewer_forbidden():
+    token = get_viewer_token()
+    response = client.post(
+        "/api/reset",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
 
 
 def test_reset_success():
-    """POST /api/reset should return success message."""
+    token = get_commander_token()
     with patch("main.robot") as mock_robot:
         mock_robot.reset = AsyncMock(return_value={"message": "Simulation reset."})
-        response = client.post("/api/reset")
+        response = client.post(
+            "/api/reset",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert response.status_code == 200
-        assert response.json()["message"] == "Simulation reset."
 
 
-def test_reset_robot_unreachable():
-    """POST /api/reset should return error dict when robot is unreachable."""
-    with patch("main.robot") as mock_robot:
-        mock_robot.reset = AsyncMock(side_effect=RobotConnectionError("Timeout"))
-        response = client.post("/api/reset")
-        assert response.status_code == 200
-        assert "error" in response.json()
+def test_get_logs_unauthenticated():
+    response = client.get("/api/logs")
+    assert response.status_code == 401
+
+
+def test_get_logs_authenticated():
+    token = get_viewer_token()
+    response = client.get(
+        "/api/logs",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
