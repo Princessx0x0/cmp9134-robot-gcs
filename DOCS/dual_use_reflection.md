@@ -1,0 +1,7 @@
+# Dual Use Reflection — CMP9134 Robot GCS
+
+## Worst-case scenarios
+If an unauthorised actor gains Commander-level access to the Ground Control Station, the consequences could be severe. In a real warehouse deployment, a compromised GCS could be used to deliberately drive the robot into personnel or infrastructure, causing physical harm. An attacker could also drain the battery to zero by issuing continuous movement commands, denying legitimate operators the use of the robot and disrupting warehouse operations.Furthermore, the lidar and proximity sensor data could be exploited for malicious reconnaissance, systematically mapping the facility's layout, identifying blind spots, or locating high-value assets without physical presence.
+
+## How the system mitigates this
+The system architecture addresses these risks through layered controls. Role-Based Access Control ensures movement commands are exclusively available to authenticated Commander accounts — unauthenticated requests are rejected with a 401 response before reaching the robot client. JWT tokens expire after 60 minutes, limiting the damage window if a token is stolen. Every command is immutably logged with a timestamp and the issuing user's identity, creating a forensic audit trail. Passwords are hashed with bcrypt and never stored in plaintext. However, no software control alone is sufficient — network-level access to the GCS must itself be restricted, as a system exposed to the public internet would remain vulnerable regardless of application-layer controls.
