@@ -4,10 +4,9 @@ models.py — SQLAlchemy ORM models
 Defines the database tables for Users and Mission Logs.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
 from database import Base
-from sqlalchemy import Column, Integer, String, DateTime
 
 
 class User(Base):
