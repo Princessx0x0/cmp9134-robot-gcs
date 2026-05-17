@@ -22,7 +22,8 @@ from robot_client import robot, RobotConnectionError
 # ── Configuration ──────────────────────────────────────────────────────────
 ROBOT_API_URL = os.getenv("ROBOT_API_URL", "http://localhost:5000")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
-ENABLE_ADVANCED_STATS = os.getenv("FF_ADVANCED_STATS", "false").lower() == "true"
+ENABLE_ADVANCED_STATS = os.getenv(
+    "FF_ADVANCED_STATS", "false").lower() == "true"
 
 # ── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(level=LOG_LEVEL.upper())
@@ -140,14 +141,25 @@ async def reset_robot(
         db.commit()
 
 
+@app.get("/api/map")
+async def get_map(current_user=Depends(require_viewer)):
+    """Get the full 21x21 obstacle map."""
+    try:
+        return await robot.get_map()
+    except RobotConnectionError as exc:
+        return {"error": str(exc)}
+
 # ── Audit logs ─────────────────────────────────────────────────────────────
+
+
 @app.get("/api/logs")
 def get_logs(
     current_user=Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     """Return the last 50 mission log entries. Requires authentication."""
-    logs = db.query(MissionLog).order_by(MissionLog.created_at.desc()).limit(50).all()
+    logs = db.query(MissionLog).order_by(
+        MissionLog.created_at.desc()).limit(50).all()
     return [
         {
             "id": log.id,
