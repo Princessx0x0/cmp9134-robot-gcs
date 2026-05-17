@@ -4,6 +4,11 @@ Integration Tests — API Routes
 Tests all API endpoints with proper authentication headers.
 """
 
+from robot_client import RobotStatus, RobotConnectionError
+from auth import hash_password, create_access_token
+from models import User
+from database import get_db, Base
+from main import app
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
@@ -15,15 +20,12 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
-from database import get_db, Base
-from models import User
-from auth import hash_password, create_access_token
-from robot_client import RobotStatus, RobotConnectionError
 
 TEST_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_engine(TEST_DATABASE_URL, connect_args={
+                       "check_same_thread": False})
+TestingSessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine)
 
 
 def override_get_db():
@@ -87,13 +89,11 @@ def test_health_check():
 
 
 def test_register_new_user():
-    response = client.post(
-        "/auth/register",
-        json={
-            "username": "brandnewuser",
-            "password": "password123",
-        },
-    )
+    import time
+    response = client.post("/auth/register", json={
+        "username": f"newuser_{int(time.time())}",
+        "password": "password123",
+    })
     assert response.status_code == 201
 
 
@@ -194,7 +194,8 @@ def test_move_viewer_forbidden():
 def test_move_valid_coordinates():
     token = get_commander_token()
     with patch("main.robot") as mock_robot:
-        mock_robot.move = AsyncMock(return_value={"message": "Navigating to (5, 10)"})
+        mock_robot.move = AsyncMock(
+            return_value={"message": "Navigating to (5, 10)"})
         response = client.post(
             "/api/move",
             params={"x": 5, "y": 10},
@@ -206,7 +207,8 @@ def test_move_valid_coordinates():
 def test_move_robot_unreachable():
     token = get_commander_token()
     with patch("main.robot") as mock_robot:
-        mock_robot.move = AsyncMock(side_effect=RobotConnectionError("Timeout"))
+        mock_robot.move = AsyncMock(
+            side_effect=RobotConnectionError("Timeout"))
         response = client.post(
             "/api/move",
             params={"x": 5, "y": 5},
@@ -233,7 +235,8 @@ def test_reset_viewer_forbidden():
 def test_reset_success():
     token = get_commander_token()
     with patch("main.robot") as mock_robot:
-        mock_robot.reset = AsyncMock(return_value={"message": "Simulation reset."})
+        mock_robot.reset = AsyncMock(
+            return_value={"message": "Simulation reset."})
         response = client.post(
             "/api/reset",
             headers={"Authorization": f"Bearer {token}"},
