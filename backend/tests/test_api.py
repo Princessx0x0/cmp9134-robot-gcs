@@ -1,22 +1,21 @@
 """
 Integration Tests — API Routes
-===============================
-Tests all API endpoints with proper authentication headers.
 """
+# fmt: off
 from robot_client import RobotStatus, RobotConnectionError
 from auth import hash_password, create_access_token
 from models import User
 from database import get_db, Base
 from main import app
-import pytest
-from unittest.mock import AsyncMock, patch
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
+import pytest
 import sys
 import os
-sys.path.insert(0, os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# fmt: on
 
 
 TEST_DATABASE_URL = "sqlite:///./test.db"
